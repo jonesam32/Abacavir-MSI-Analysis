@@ -1,0 +1,18 @@
+%Writing Summary File for Abacavir
+Statfile=strcat(folder,ProjectName(1),'_ARVstats.xlsx');
+Statfile=char(Statfile(1));
+Rowstats=['Region';'Min   ';'Max   ';'Mean  ';'Median';'Mode  ';'Std   ';'Var   ';'Area  ';'FrcTIS'];
+Rowstats=cellstr(Rowstats);
+Rownames=Rowstats;
+ARV_stat_table=array2table(ARV_stats,'VariableNames',Summary_names,'RowNames',Rownames);
+writetable(ARV_stat_table, Statfile, 'Sheet', 'Abacavir_Summary','WriteRowNames',true);
+%Summarizing GFAP staining
+% Rownames=['GFAP single';'GFAP total ';'GFAP count ';'GFAP area  ';'slice area ';'fraction   '];
+% Rownames=cellstr(Rownames);
+% GFAPstats_table=array2table(GFAP_stats,'RowNames',Rownames)
+% writetable(GFAPstats_table, Statfile, 'Sheet', 'GFAP_Summary','WriteRowNames',true)
+% writetable(GFAPstats_table, Statfile, 'Sheet', 'GFAP_Summary')
+clear AnnotationMask cform GFAP GFAPmask io mask mask_plot overlay pageinfo1 Region Regions slice smaller_x smaller_y vertices xy;
+Workspacefile=strcat(folder,ProjectName(1));
+Workspacefile=char(Workspacefile);
+save(Workspacefile);
