@@ -1,0 +1,79 @@
+J_tform=fitgeotrans(movingPoints,fixedPoints,'affine') %create transformation matrix
+Rfixed=imref2d(dims.MSI)
+xformlabel='MSI_Xform'
+mkdir(folder,xformlabel)
+for i=1:num_ions(2) %transform all MSI data
+	ion=char(ARVnames(i))
+    ARV.xform.(ion)=imwarp(ARV.scaled.(ion),J_tform,'OutputView',Rfixed, 'interp', 'nearest')
+    ARV.xform_raw.(ion)=imwarp(ARV.mask.(ion),J_tform,'OutputView',Rfixed, 'interp', 'nearest')
+    figure('name',ion,'Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    imagesc(dims.boundsx,dims.boundsy,ARV.xform.(ion))
+    set(gcf, 'Color', 'w');
+    imagename=strcat(folder,xformlabel,'\','Xform_',ion)
+    export_fig(imagename,'-jpg')
+    close(gcf)
+end
+slice_flip=flipud(DS_IHC.slice_scaled);
+for i=1:num_ions(2)
+	ionstring=num2str(RawMSI.Label(i),3)
+	ion=strcat(label,ionstring)
+    ion_names{i}=ion
+    overlay=figure('Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    arv_axes=axes('Parent',overlay)
+    chol_axes=axes('Parent',overlay)
+    colormap(arv_axes,hot)
+    colormap(chol_axes,bone)
+    set(arv_axes,'Visible','off')
+    set(chol_axes,'Visible','off')
+    linkaxes([arv_axes,chol_axes])
+    arv_plot=imagesc(dims.boundsx,dims.boundsy,ARV.xform.(ion),'Parent',arv_axes)
+    hold on
+    chol_plot=imagesc(dims.boundsx,dims.boundsy,slice_flip,'Parent',chol_axes)
+    set(chol_plot,'AlphaData',0.4)
+    hold off
+    imagename=strcat(folder,xformlabel,'\','Overlay_TissueSlice_',ion)
+    export_fig(imagename,'-png')
+    close(gcf)
+end
+%Check registration
+multiplier=5;
+fuse_overlay_IHC=imfuse(DS_IHC.GFAP_scaled, DS_IHC.slice_scaled, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+imagesc(dims.boundsx,dims.boundsy,fuse_overlay_IHC)
+imagename=strcat(folder,'Fuse_IHC_GFAPandSlice')
+export_fig(imagename,'-jpg')
+close(gcf)
+fuse_overlay_prexfrom=imfuse(DS_IHC.slice_scaled, ARV.scaled.mz369, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+image(fuse_overlay_prexfrom)
+imagename=strcat(folder,'Fuse_SliceandMSI_prexform')
+hold on
+plot(movingPoints(:,1),movingPoints(:,2),'xw')
+plot(fixedPoints(:,1),fixedPoints(:,2),'ow')
+export_fig(imagename,'-jpg')
+close(gcf)
+movingPoints_xform=transformPointsForward(J_tform,movingPoints)
+fuse_overlay=imfuse(DS_IHC.GFAP_scaled, ARV.xform.mz369, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+image(fuse_overlay)
+hold on
+plot(movingPoints_xform(:,1),movingPoints_xform(:,2),'xw')
+plot(fixedPoints(:,1),fixedPoints(:,2),'ow')
+imagename=strcat(folder,'Fuse_GFAPandMSI')
+export_fig(imagename,'-jpg')
+close(gcf)
+fuse_overlay_Caudoputamen=imfuse(AnnotationMask_DS.Caudoputamen, ARV.xform.mz154, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+imagesc(dims.boundsx,dims.boundsy,fuse_overlay_Caudoputamen)
+imagename=strcat(folder,'Fuse_GFAPandMSI_CerebralCortex')
+export_fig(imagename,'-jpg')
+close(gcf)
+fuse_overlay_slice=imfuse(DS_IHC.slice_scaled, ARV.xform.mz369, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+image(fuse_overlay_slice)
+hold on
+plot(movingPoints_xform(:,1),movingPoints_xform(:,2),'xw')
+plot(fixedPoints(:,1),fixedPoints(:,2),'ow')
+imagename=strcat(folder,'Fuse_SliceandMSI')
+export_fig(imagename,'-jpg')
+close(gcf)
