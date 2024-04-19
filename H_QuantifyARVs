@@ -1,0 +1,51 @@
+% Get user input about which drugs to assess
+%[ARVselection,ok]=listdlg('PromptString', 'Select ions for quantification:','ListString',ARVnames)
+%num_ions=max(size(ARVselection))
+% Get user input about ABC concentration from section as quantified by MSI
+ABC_input=inputdlg({'Enter TOTAL abacavir concentration (ng)'},'Quantifying ABC',1,{''});
+ABC_total_ng=str2num(ABC_input{1});
+clear ABC_input;
+% QUANTITATIVE ASSESSMENT OF ABACAVIR
+% Proportional scaling of total drug across all voxels, and scaling by
+% tissue mass to get units of (ng/g)
+ABC_ng.Whole_Section=ARV.xform_raw.mz287.*ABC_total_ng./sum(ARV.xform_raw.mz287(:));
+ABC_total_ng_check=sum(ABC_ng.Whole_Section(:));
+voxel_area=0.1^2; %mm^2
+voxel_thickness=0.01; %mm
+tissue_density=1.06/1000; %g/mm^3
+ABC_ng_g.Whole_Section=ABC_ng.Whole_Section/voxel_area/voxel_thickness/tissue_density;
+% figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+% imagesc(dims.boundsx,dims.boundsy,ABC_ng_g.Whole_Section)
+ABC_ng.GFAP=DS_IHC.GFAP_scaledmask.*ABC_ng.Whole_Section;
+ABC_ng_g.GFAP=DS_IHC.GFAP_scaledmask.*ABC_ng_g.Whole_Section;
+for i = 1:NumAnnotations
+   region=Annotation_Name(i);
+   ABC_ng.(region)=AnnotationMask_DS.(region).*ABC_ng.Whole_Section; 
+   ABC_ng_g.(region)=AnnotationMask_DS.(region).*ABC_ng_g.Whole_Section;
+end
+Summary_names=fieldnames(ABC_ng_g);
+%Evaluate descriptive statistics on selected MSI data
+section_area=nnz(ARVmask)*voxel_area
+for j=1:max(size(Summary_names))
+    Summary_field=char(Summary_names(j));
+    if j==1
+        area=nnz(ARVmask);
+    elseif j==2
+        area=nnz(DS_IHC.GFAP_scaledmask);
+    else
+        region=Annotation_Name(j-2);
+        area=nnz(AnnotationMask_DS.(region));
+    end
+    vals_ng=nonzeros(ABC_ng.(Summary_field));
+    vals_ng_g=nonzeros(ABC_ng_g.(Summary_field));
+    ARV_stats(1,j)=sum(vals_ng)/(area*voxel_area)/voxel_thickness/tissue_density;
+    ARV_stats(2,j)=min(vals_ng_g);
+    ARV_stats(3,j)=max(vals_ng_g);
+    ARV_stats(4,j)=mean(vals_ng_g);
+    ARV_stats(5,j)=median(vals_ng_g);
+    ARV_stats(6,j)=mode(vals_ng_g);
+    ARV_stats(7,j)=std(vals_ng_g);
+    ARV_stats(8,j)=var(vals_ng_g);
+    ARV_stats(9,j)=nnz(ABC_ng_g.(Summary_field));
+    ARV_stats(10,j)=ARV_stats(9,j)/area;
+end
