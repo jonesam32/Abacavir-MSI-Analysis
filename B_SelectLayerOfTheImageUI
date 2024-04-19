@@ -1,0 +1,28 @@
+I1info=imfinfo([pathname filename]);
+for i=1:numel(I1info),pageinfo1{i}=['Page ' num2str(i) ': ' num2str(I1info(i).Height) ' x ' num2str(I1info(i).Width)]; end
+fprintf('done.\n');
+fname=[pathname filename];
+if numel(I1info)>1,
+    [s,v]=listdlg('Name','Choose Level','PromptString','Select a page for Roi Discovery:','SelectionMode','single','ListSize',[170 120],'ListString',pageinfo1); drawnow;
+    if ~v, guidata(hObject, handles); return; end
+    fprintf('Reading page %g of image 1... ',s);
+    io=imread(fname,s);
+    fprintf('done.\n');
+else
+    fprintf('Image doesnt have any pages!\n');
+end
+
+%Dimensions of the IHC TIFF
+dims.IHC=size(io);
+dims.IHC=dims.IHC(1:2);
+nrow=dims.IHC(1);
+ncol=dims.IHC(2);
+
+%If importing SVS, this should evaluate the image compression to be applied
+%to XML data
+hratio=ncol/I1info(1).Width;
+wratio=nrow/I1info(1).Height;
+% %Get downsampling ratios used for TIFF, to be applied to the annotations
+% IHC_raw_scaling=inputdlg({'Scaling factor, height','Scaling factor, width'},'Enter scaling factor for IHC image relative to raw image',1,{'0.4','0.4'});
+% hratio=str2num(IHC_raw_scaling{1});  
+% wratio=str2num(IHC_raw_scaling{2});
