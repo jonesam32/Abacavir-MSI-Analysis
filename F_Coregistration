@@ -1,0 +1,178 @@
+%%%%%%%%%Downsample IHC data and annotation masks
+dims.resize=max(dims.MSI./dims.IHC);
+length = num2str(dims.resize);
+length = strsplit(length,'.');
+zero_find=strfind(char(length(2)),'0');
+numzeros=size(zero_find,2);
+n=2;
+for i= 1 : numzeros
+   if i==1
+       n=n+1;
+   elseif i>1
+       increment = zero_find(i)-zero_find(i-1);
+       %fprintf('in loop %d, increment=%d\n',i,increment)
+       if increment==1
+           n=n+1;
+       end
+   end
+   %fprintf('loop %d  n = %d.',i,n);
+end
+dims.resize_scale=ceil(dims.resize*10^n)/10^n;
+DS_IHC.GFAP_resize=imresize(GFAP,dims.resize_scale,'box');
+DS_IHC.slice_resize=imresize(slice,dims.resize_scale);
+%Crop downsampled IHC data to match dimensions of MSI data
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+imagesc(DS_IHC.slice_resize)
+h = imrect(gca, [1 1 dims.MSI(2) dims.MSI(1)]); % create rectangle on the image
+message = sprintf('Drag, set position of the rectangle cropping box and double click on the rectangle box');
+uiwait(msgbox(message));
+position = wait(h); % get position
+DS_IHC.GFAP_cropped = imcrop(DS_IHC.GFAP_resize,position);
+DS_IHC.slice_cropped = imcrop(DS_IHC.slice_resize,position);
+% Perform the same downsampling and cropping for each Annotation Group
+for i = 1:NumAnnotations    AnnotationMask_DS.(Annotation_Name(i))=imresize(AnnotationMask.(Annotation_Name(i)),dims.resize_scale,'nearest');
+   AnnotationMask_DS.(Annotation_Name(i))=imcrop(AnnotationMask_DS.(Annotation_Name(i)),position);
+   AnnotationMask_DS.(Annotation_Name(i))=AnnotationMask_DS.(Annotation_Name(i))
+end
+dims.slice_cropped=size(DS_IHC.slice_cropped);
+dims.GFAP_cropped=size(DS_IHC.GFAP_cropped);
+% Verify whether cropped dimensions match MSI
+cropcheck_slice=dims.slice_cropped-dims.MSI; 
+cropcheck_GFAP=dims.GFAP_cropped-dims.MSI;
+    if cropcheck_slice(1)>0
+        start=cropcheck_slice(1)+1;
+        DS_IHC.slice_cropped = DS_IHC.slice_cropped(start:dims.slice_cropped(1),:);
+        DS_IHC.GFAP_cropped = DS_IHC.GFAP_cropped(start:dims.GFAP_cropped(1),:);
+        for i = 1:NumAnnotations              AnnotationMask_DS.(Annotation_Name(i))=AnnotationMask_DS.(Annotation_Name(i))(start:dims.GFAP_cropped(1),:);
+        end
+    end 
+    if cropcheck_slice(1)<0
+        start=1;
+        limit=dims.slice_cropped(1)-cropcheck_slice(1);
+        DS_IHC.slice_cropped = DS_IHC.slice_cropped(start:limit,:)
+        DS_IHC.GFAP_cropped = DS_IHC.GFAP_cropped(start:limit,:)
+        for i = 1:NumAnnotations 
+             AnnotationMask_DS.(Annotation_Name(i))=AnnotationMask_DS.(Annotation_Name(i))(start:limit,:);
+        end
+    end 
+    if cropcheck_slice(2)>0
+        start=cropcheck_slice(2)+1;
+        DS_IHC.slice_cropped = DS_IHC.slice_cropped(:,start:dims.slice_cropped(2))
+        DS_IHC.GFAP_cropped = DS_IHC.GFAP_cropped(:,start:dims.GFAP_cropped(2)) 
+        for i = 1:NumAnnotations      AnnotationMask_DS.(Annotation_Name(i))=AnnotationMask_DS.(Annotation_Name(i))(:,start:dims.GFAP_cropped(2));
+        end
+    end 
+    if cropcheck_slice(2)<0
+        start=1;
+        limit=dims.slice_cropped(2)-cropcheck_slice(2);       
+        DS_IHC.slice_cropped = DS_IHC.slice_cropped(:,start:limit)
+        DS_IHC.GFAP_cropped = DS_IHC.GFAP_cropped(:,start:limit)
+        for i = 1:NumAnnotations             AnnotationMask_DS.(Annotation_Name(i))=AnnotationMask_DS.(Annotation_Name(i))(:,start:limit);
+        end
+    end     
+dims.IHCcropped_slice=size(DS_IHC.slice_cropped); 
+dims.IHCcropped_GFAP=size(DS_IHC.GFAP_cropped); 
+% Creating images to check rescale
+DS_IHC.GFAP_scaled = imadjust(DS_IHC.GFAP_cropped);
+DS_IHC.slice_scaled = imadjust(DS_IHC.slice_cropped);
+DS_IHC.GFAP_scaledmask=DS_IHC.GFAP_scaled>0.15;
+DS_IHC.GFAP_invertmask=imcomplement(DS_IHC.GFAP_scaledmask);
+GFAP_area_DS=nnz(DS_IHC.GFAP_scaledmask);
+figure, imagesc(DS_IHC.GFAP_scaledmask);
+figure, imagesc(DS_IHC.GFAP_invertmask);
+%Register MSI data to IHC data
+% [IHCfixed,ok]=listdlg('PromptString', 'Registration IHC image:','ListString',IHCstain)
+% fixed=char(IHCstain(IHCfixed))
+% [MSImove,ok]=listdlg('PromptString', 'Registration MSI image:','ListString',ARVnames)
+% moving=char(ARVnames(MSImove))
+[Endog_selection,ok]=listdlg('PromptString', 'Select endogenous ions representing tissue morphology:','ListString',ARVnames)
+num_endog=max(size(Endog_selection));
+composite_endog=zeros(dims.MSI(1),dims.MSI(2));
+for i = 1:num_endog
+	ionstring=num2str(RawMSI.Label(Endog_selection(i)),3)
+	ion=strcat(label,ionstring)    
+    composite_endog=composite_endog+ARV.scaled.(ion);
+end
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+imagesc(composite_endog)
+%control point registration, translating MSI to IHC
+cpselect(composite_endog,DS_IHC.slice_scaled) %select control points
+J_tform=fitgeotrans(movingPoints,fixedPoints,'affine') %create transformation matrix
+Rfixed=imref2d(dims.MSI)
+xformlabel='MSI_Xform'
+mkdir(folder,xformlabel)
+for i=1:num_ions(2) %transform all MSI data
+	ion=char(ARVnames(i))
+    ARV.xform.(ion)=imwarp(ARV.scaled.(ion),J_tform,'OutputView',Rfixed, 'interp', 'nearest')
+    ARV.xform_raw.(ion)=imwarp(ARV.mask.(ion),J_tform,'OutputView',Rfixed, 'interp', 'nearest')
+    figure('name',ion,'Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    imagesc(dims.boundsx,dims.boundsy,ARV.xform.(ion))
+    set(gcf, 'Color', 'w');
+    imagename=strcat(folder,xformlabel,'\','Xform_',ion)
+    export_fig(imagename,'-jpg')
+    close(gcf)
+end
+slice_flip=flipud(DS_IHC.slice_scaled);
+for i=1:num_ions(2)
+	ionstring=num2str(RawMSI.Label(i),3)
+	ion=strcat(label,ionstring)
+    ion_names{i}=ion
+    overlay=figure('Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    arv_axes=axes('Parent',overlay)
+    chol_axes=axes('Parent',overlay)
+    colormap(arv_axes,hot)
+    colormap(chol_axes,bone)
+    set(arv_axes,'Visible','off')
+    set(chol_axes,'Visible','off')
+    linkaxes([arv_axes,chol_axes])
+    arv_plot=imagesc(dims.boundsx,dims.boundsy,ARV.xform.(ion),'Parent',arv_axes)
+    hold on
+    chol_plot=imagesc(dims.boundsx,dims.boundsy,slice_flip,'Parent',chol_axes)
+    set(chol_plot,'AlphaData',0.4)
+    hold off
+    imagename=strcat(folder,xformlabel,'\','Overlay_TissueSlice_',ion)
+    export_fig(imagename,'-png')
+    close(gcf)
+end
+%Check registration
+multiplier=5;
+fuse_overlay_IHC=imfuse(DS_IHC.GFAP_scaled, DS_IHC.slice_scaled, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+imagesc(dims.boundsx,dims.boundsy,fuse_overlay_IHC)
+imagename=strcat(folder,'Fuse_IHC_GFAPandSlice')
+export_fig(imagename,'-jpg')
+close(gcf)
+fuse_overlay_prexfrom=imfuse(DS_IHC.slice_scaled, ARV.scaled.mz369, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+image(fuse_overlay_prexfrom)
+imagename=strcat(folder,'Fuse_SliceandMSI_prexform')
+hold on
+plot(movingPoints(:,1),movingPoints(:,2),'xw')
+plot(fixedPoints(:,1),fixedPoints(:,2),'ow')
+export_fig(imagename,'-jpg')
+close(gcf)
+movingPoints_xform=transformPointsForward(J_tform,movingPoints)
+fuse_overlay=imfuse(DS_IHC.GFAP_scaled, ARV.xform.mz369, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+image(fuse_overlay)
+hold on
+plot(movingPoints_xform(:,1),movingPoints_xform(:,2),'xw')
+plot(fixedPoints(:,1),fixedPoints(:,2),'ow')
+imagename=strcat(folder,'Fuse_GFAPandMSI')
+export_fig(imagename,'-jpg')
+close(gcf)
+fuse_overlay_Caudoputamen=imfuse(AnnotationMask_DS.Caudoputamen, ARV.xform.mz154, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+imagesc(dims.boundsx,dims.boundsy,fuse_overlay_Caudoputamen)
+imagename=strcat(folder,'Fuse_GFAPandMSI_CerebralCortex')
+export_fig(imagename,'-jpg')
+close(gcf)
+fuse_overlay_slice=imfuse(DS_IHC.slice_scaled, ARV.xform.mz369, 'falsecolor','ColorChannels', [1 2 0]);
+figure('Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+image(fuse_overlay_slice)
+hold on
+plot(movingPoints_xform(:,1),movingPoints_xform(:,2),'xw')
+plot(fixedPoints(:,1),fixedPoints(:,2),'ow')
+imagename=strcat(folder,'Fuse_SliceandMSI')
+export_fig(imagename,'-jpg')
+close(gcf)
