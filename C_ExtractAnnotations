@@ -1,0 +1,81 @@
+[baseName, folder] = uigetfile({'*.xml'},'Select annotation data');
+xml_file = fullfile(folder, baseName)
+xDoc = xmlread(xml_file);
+Regions=xDoc.getElementsByTagName('Region'); % get a list of all the region tags
+for regioni = 0:Regions.getLength-1
+    Region=Regions.item(regioni);  % for each region tag 
+    %get a list of all the vertexes (which are in order)
+    vertices=Region.getElementsByTagName('Vertex');
+    xy{1,regioni+1}=zeros(vertices.getLength-1,2); %allocate space for them
+    for vertexi = 0:vertices.getLength-1 %iterate through all verticies
+        %get the x value of that vertex
+        x=str2double(vertices.item(vertexi).getAttribute('X'));
+       
+        %get the y value of that vertex
+        y=str2double(vertices.item(vertexi).getAttribute('Y'));
+        xy{1,regioni+1}(vertexi+1,:)=[x,y]; % finally save them into the array
+    end
+end
+stDoc = parseXML(xml_file);
+%Some structs from xml extraction need to be cleaned
+stDoc.Children = CleanStruct(stDoc.Children, "Annotation");
+%Extracting quantity of annotations
+NumAnnotations = length(stDoc.Children);
+%Cleaning structs again
+for i = 1:NumAnnotations
+    stDoc.Children(i).Children = CleanStruct(stDoc.Children(i).Children, "Regions");
+end
+for i = 1:NumAnnotations
+    stDoc.Children(i).Children.Children = CleanStruct(stDoc.Children(i).Children.Children, "Region");
+end
+%Extracting quantity of regions
+RegionsPerAnnotations = zeros(1,NumAnnotations);
+for i = 1:NumAnnotations
+    RegionsPerAnnotations(i) = length(stDoc.Children(i).Children.Children);
+end
+% for i = 1:NumAnnotations
+%     stDoc.Children(i).Children = CleanStruct(stDoc.Children(i).Children, "Regions");
+% end
+% Extracting Colors
+for i = 1:NumAnnotations
+   for k = 1:RegionsPerAnnotations(i)
+        xy{2,k+sum(RegionsPerAnnotations(1:i-1))} = completeRGB(dec2hex(str2double(stDoc.Children(i).Attributes(3).Value)));
+   end
+end
+
+% Extracting Text boxes of notes from ImageScope
+for i = 1:NumAnnotations
+   for k = 1:RegionsPerAnnotations(i)
+        xy{3,k+sum(RegionsPerAnnotations(1:i-1))} = stDoc.Children(i).Children.Children(k).Attributes(13).Value;
+   end   
+end
+
+% Extracting Text of Annotation name
+for i = 1:NumAnnotations
+   for k = 1:RegionsPerAnnotations(i)
+        xy{3,k+sum(RegionsPerAnnotations(1:i-1))} = stDoc.Children(i).Attributes(7).Value;
+   end   
+end
+Annotation_Name=strings(NumAnnotations,1);
+for i = 1:NumAnnotations
+   Annotation_Name(i) = stDoc.Children(i).Attributes(7).Value;
+   Annotation_Name(i) = replace(Annotation_Name(i)," ","_");
+   Annotation_Name(i) = replace(Annotation_Name(i),",","");
+end
+% Creating MASK associated with each Annotation Group
+for i = 1:NumAnnotations
+   mask=zeros(nrow,ncol);
+   for k = 1:RegionsPerAnnotations(i)
+    smaller_x=xy{1,k+sum(RegionsPerAnnotations(1:i-1))}(:,1)*wratio;
+    smaller_y=xy{1,k+sum(RegionsPerAnnotations(1:i-1))}(:,2)*hratio;
+    mask=mask+poly2mask(smaller_x,smaller_y,nrow,ncol);
+   end
+   AnnotationMask.(Annotation_Name(i))=mask;
+end
+figure('Position', [100 200 dims.IHC(2)*.05 dims.IHC(1)*.05])
+imagesc(io)
+hold on
+for i = 1:NumAnnotations
+    mask_plot=imagesc(AnnotationMask.(Annotation_Name(i)));
+    set(mask_plot,'AlphaData',0.2)
+end
