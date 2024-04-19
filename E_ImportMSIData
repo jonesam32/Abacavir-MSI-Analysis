@@ -1,0 +1,79 @@
+%Read MSI data from Excel file
+[baseName, folder] = uigetfile({'*.xlsx';'*.xls'},'Select MSI data');
+MSiFileName = fullfile(folder, baseName)
+ProjectName = strsplit(baseName,'.')
+[RawMSI.Data]=xlsread(MSiFileName,-1)%Select ion data
+[RawMSI.Label]=xlsread(MSiFileName,-1)%Select ion label
+%Prompt user for ROI
+ROI=inputdlg({'Number of lines','Scans per line','Voxel size X', 'Voxel size Y'},'Define ROI',1,{'','','0.1','0.1'})
+%dims.MSI=[str2num(ROI{2}) str2num(ROI{1})]
+dims.MSI=[str2num(ROI{1}) str2num(ROI{2})]
+dims.SpotSpacing=[str2num(ROI{3}) str2num(ROI{4})]
+dims.boundsx=[0 dims.MSI(2)*dims.SpotSpacing(1)]
+dims.boundsy=[0 dims.MSI(1)*dims.SpotSpacing(2)]
+multiplier = 5;
+clear ROI;
+%Parse imported data and generate ion images
+num_ions=size(RawMSI.Label)
+label='mz'
+rawlabel='MSI_Raw'
+mkdir(folder,rawlabel)
+scaledlabel='MSI_Scaled'
+mkdir(folder,scaledlabel)
+for i=1:num_ions(2)
+	ionstring=num2str(RawMSI.Label(i),3)
+	ion=strcat(label,ionstring)
+    ion_names{i}=ion
+    %Save images of raw MSI data
+    ARV.raw.(ion)=RawMSI.Data(:,i)
+    ARV.reshape.(ion)=reshape(ARV.raw.(ion),[dims.MSI(2),dims.MSI(1)])
+    ARV.reshape.(ion)=transpose(ARV.reshape.(ion))
+    ARV.scaled.(ion)=imadjust(mat2gray(ARV.reshape.(ion)));
+    a=figure('name',ion,'Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    imagesc(dims.boundsx,dims.boundsy,ARV.reshape.(ion))
+    set(gcf, 'Color', 'w');
+    imagename=strcat(folder,'\',rawlabel,'\','Raw_',ion)
+    c=colorbar
+    a.Position(3)=(dims.MSI(2)+c.Position(3)/dims.SpotSpacing(1)*1.5*multiplier)*multiplier
+    export_fig(imagename,'-jpg')
+    close(gcf)
+end
+%Mask any off-tissue response based on Cholesterol ion map and scale image
+ARVmask=double(ARV.scaled.mz369>0.05)
+ARVmask=imfill(ARVmask);
+figure,imagesc(ARVmask)
+ARVmask_boundary=bwperim(ARVmask);
+chol_flip=flipud(ARV.scaled.mz369);
+for i=1:num_ions(2)
+	ionstring=num2str(RawMSI.Label(i),3)
+	ion=strcat(label,ionstring)
+    ion_names{i}=ion
+    ARV.mask.(ion)=ARVmask.*ARV.reshape.(ion);
+    %Tabulate stats on ion
+    Raw_stats{i}=sum(ARV.mask.(ion)(:));
+    %Scale intensities of MSI data for comparison to IHC and save images of scaled MSI data
+    ARV.scaled.(ion)=imadjust(mat2gray(ARV.mask.(ion)));
+    figure('name',ion,'Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    imagesc(dims.boundsx,dims.boundsy,ARV.scaled.(ion))
+    set(gcf, 'Color', 'w');
+    imagename=strcat(folder,scaledlabel,'\','Scaled_',ion)
+    export_fig(imagename,'-jpg')
+    close(gcf)
+    overlay=figure('Colormap',hot,'Position', [1 1 dims.MSI(2)*multiplier dims.MSI(1)*multiplier])
+    arv_axes=axes('Parent',overlay)
+    chol_axes=axes('Parent',overlay)
+    colormap(arv_axes,hot)
+    colormap(chol_axes,parula)
+    set(arv_axes,'Visible','off')
+    set(chol_axes,'Visible','off')
+    linkaxes([arv_axes,chol_axes])
+    arv_plot=imagesc(dims.boundsx,dims.boundsy,ARV.scaled.(ion),'Parent',arv_axes)
+    hold on
+    chol_plot=imagesc(dims.boundsx,dims.boundsy,chol_flip,'Parent',chol_axes)
+    set(chol_plot,'AlphaData',0.2)
+    hold off
+    imagename=strcat(folder,scaledlabel,'\','Overlay_Scaled_',ion)
+    export_fig(imagename,'-png')
+    close(gcf)
+end
+ARVnames=fieldnames(ARV.scaled)
